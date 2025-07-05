@@ -23,7 +23,7 @@ from utils import NativeScalerWithGradNormCount as NativeScaler
 import utils as utils
 
 from model import *
-from classification.data.samplers import MultiScaleSamplerDDP
+from data.samplers import MultiScaleSamplerDDP #classification.
 
 
 def str2bool(v):
@@ -45,7 +45,7 @@ def get_args_parser():
     parser = argparse.ArgumentParser('CAS-ViT training and evaluation script for image classification', add_help=False)
     parser.add_argument('--batch_size', default=256, type=int,
                         help='Per GPU batch size')
-    parser.add_argument('--epochs', default=300, type=int)
+    parser.add_argument('--epochs', default=30, type=int)
     parser.add_argument('--update_freq', default=2, type=int,
                         help='gradient accumulation steps')
 
@@ -54,8 +54,8 @@ def get_args_parser():
                         help='Name of model to train')
     parser.add_argument('--drop_path', type=float, default=0.1, metavar='PCT',
                         help='Drop path rate (default: 0.0)')
-    parser.add_argument('--input_size', default=224, type=int,
-                        help='image input size')
+    parser.add_argument('--input_size', default=32, type=int,
+                        help='image input size') #default=224
     parser.add_argument('--layer_scale_init_value', default=1e-6, type=float,
                         help="Layer scale initial values")
 
@@ -131,15 +131,15 @@ def get_args_parser():
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='datasets/imagenet_full', type=str,
-                        help='dataset path (path to full imagenet)')
+    parser.add_argument('--data_path', default='datasets/cifar100', type=str,
+                        help='dataset path (path to full imagenet/cifar)') # default='datasets/imagenet_full'
     parser.add_argument('--eval_data_path', default=None, type=str,
                         help='dataset path for evaluation')
-    parser.add_argument('--nb_classes', default=1000, type=int,
+    parser.add_argument('--nb_classes', default=100, type=int, #default=1000
                         help='number of the classification types')
     parser.add_argument('--imagenet_default_mean_and_std', type=str2bool, default=True)
-    parser.add_argument('--data_set', default='IMNET', choices=['IMNET', 'image_folder'],
-                        type=str, help='ImageNet dataset path')
+    parser.add_argument('--data_set', default='IMNET', choices=['IMNET', 'image_folder', 'CIFAR'],
+                        type=str, help='ImageNet/CIFAR dataset path')
     parser.add_argument('--output_dir', default='',
                         help='path where to save, empty for no saving')
     parser.add_argument('--log_dir', default=None,
@@ -199,6 +199,10 @@ def get_args_parser():
     parser.add_argument('--classifier_dropout', default=0.0, type=float)
     parser.add_argument('--usi_eval', type=str2bool, default=False,
                         help="Enable it when testing USI model.")
+
+    parser.add_argument('--print_verbose', default=0, choices=[0, 1, 2],
+                            type=int, help='Level of verbosity for logging (0: no logs, 1: basic logs, 2: detailed logs)')
+
 
     return parser
 
@@ -502,19 +506,20 @@ def main(args):
     if wandb_logger and args.wandb_ckpt and args.save_ckpt and args.output_dir:
         wandb_logger.log_checkpoints()
 
-    if args.output_dir and utils.is_main_process():
-        with open(os.path.join(args.output_dir, f"{logger_name}_{args.input_size}.txt"), mode="a",
-                  encoding="utf-8") as f:
-            info = f"Total Max accuracy: {max(max_accuracy, max_accuracy_ema):.2f}, with max accuracy: {max_accuracy:.2f} and max EMA accuracy: {max_accuracy_ema:.2f}"
-            f.write(json.dumps(info) + "\n")
+    if args.model_ema and args.model_ema_eval:
+        if args.output_dir and utils.is_main_process():
+            with open(os.path.join(args.output_dir, f"{logger_name}_{args.input_size}.txt"), mode="a",
+                    encoding="utf-8") as f:
+                info = f"Total Max accuracy: {max(max_accuracy, max_accuracy_ema):.2f}, with max accuracy: {max_accuracy:.2f} and max EMA accuracy: {max_accuracy_ema:.2f}"
+                f.write(json.dumps(info) + "\n")
 
-    # if max_accuracy > max_accuracy_ema:
-    #     shutil.copyfile(os.path.join(args.output_dir, f"checkpoint-best_{args.input_size}.pth"),
-    #                     os.path.join(args.output_dir, f"best_{args.input_size}_{max_accuracy:.2f}.pth"))
-    # else:
-    #     shutil.copyfile(os.path.join(args.output_dir, f"checkpoint-best-ema_{args.input_size}.pth"),
-    #                     os.path.join(args.output_dir, f"best_{args.input_size}_{max_accuracy_ema:.2f}.pth"))
-    print(f"Total max accuracy: {max(max_accuracy, max_accuracy_ema):.2f}%")
+        # if max_accuracy > max_accuracy_ema:
+        #     shutil.copyfile(os.path.join(args.output_dir, f"checkpoint-best_{args.input_size}.pth"),
+        #                     os.path.join(args.output_dir, f"best_{args.input_size}_{max_accuracy:.2f}.pth"))
+        # else:
+        #     shutil.copyfile(os.path.join(args.output_dir, f"checkpoint-best-ema_{args.input_size}.pth"),
+        #                     os.path.join(args.output_dir, f"best_{args.input_size}_{max_accuracy_ema:.2f}.pth"))
+        print(f"Total max accuracy: {max(max_accuracy, max_accuracy_ema):.2f}%")
 
 
     total_time = time.time() - start_time

@@ -6,6 +6,16 @@ from timm.utils import accuracy, ModelEma
 
 import utils
 
+from torch.utils.tensorboard import SummaryWriter #EVANDRO: Tensorboard
+
+reduce_sim_log = []  # at the start of training
+
+#2. Adjust lambda_dap dynamically during training
+#a. Define scheduler function base=0.005, final=0.05
+def get_lambda_dap(epoch, max_epoch, base=0.005, final=0.05):
+    """ Linearly scale lambda_dap from base to final over max_epoch """
+    return base + (final - base) * (epoch / max_epoch)
+
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -14,6 +24,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     wandb_logger=None, start_steps=None, lr_schedule_values=None, wd_schedule_values=None,
                     num_training_steps_per_epoch=None, update_freq=None, use_amp=False):
     model.train(True)
+
+    writer = SummaryWriter(log_dir='./runs/rcvit_with_dap') #EVANDRO: Tensorboard
+
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     metric_logger.add_meter('min_lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -21,8 +34,11 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     print_freq = 100
 
     optimizer.zero_grad()
-
+    
+    best_sim = -1.0  # Initialize best_sim to a very low value
     for data_iter_step, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+        global_step = epoch * len(data_loader) + data_iter_step #EVANDRO: Global step for Tensorboard
+
         step = data_iter_step // update_freq
         if step >= num_training_steps_per_epoch:
             continue
@@ -38,22 +54,97 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
 
+        #EVANDRO: DAP LOSS   
+        #dap_lambda = 0.01 #antes era 0.1 # DAP uses something between 0.01 and 0.05 ?
+        TASK_EMB = 256
+        task_id_emb = torch.zeros((samples.size(0), TASK_EMB), device=samples.device) 
+
+
         if mixup_fn is not None:
             samples, targets = mixup_fn(samples, targets)
 
         if use_amp:
             with torch.cuda.amp.autocast():
-                output = model(samples)
-                loss = criterion(output, targets)
+                output, reduce_sim_score = model(samples, task_id_emb=task_id_emb)                 
+                #output = model(samples)
+                cls_loss = criterion(output, targets)
         else:  # Full precision
-            output = model(samples)
-            loss = criterion(output, targets)
+            output, reduce_sim_score = model(samples, task_id_emb=task_id_emb)             
+            #output = model(samples)
+            cls_loss = criterion(output, targets)
 
+
+
+        #auto lambda
+        dap_lambda = get_lambda_dap(epoch, max_epoch=10)
+
+        #EVANDRO: DAP LOSS
+        simloss = dap_lambda * reduce_sim_score
+
+        #loss_dap =  torch.sum(loss_cls) / targets.shape[0]
+        #loss_dap -= simloss 
+        
+        #loss = loss_cls  
+        #loss += simloss 
+
+
+        # Apply ReduceSim the DAP way (as a reward)
+        loss = cls_loss - dap_lambda * reduce_sim_score
+
+        # Inside training loop
+        reduce_sim_log.append(reduce_sim_score.item())
+
+        writer.add_scalar('Loss/cls_loss', cls_loss.item(), global_step)
+        writer.add_scalar('Loss/reduce_sim', reduce_sim_score.item(), global_step)
+        writer.add_scalar('Loss/total_loss', loss.item(), global_step)
+        writer.add_scalar('Hyper/dap_lambda', dap_lambda, global_step)
+
+        # === Optional: Accuracy logging === #EVANDRO
+        acc1 = accuracy(output, targets.cuda(), topk=(1,))[0]
+        writer.add_scalar('Accuracy/top1', acc1.item(), global_step)        
+
+        # === Save best ReduceSim model ===
+        if reduce_sim_score.item() > best_sim:
+            best_sim = reduce_sim_score.item()
+            torch.save(model.state_dict(), "./output/best_sim_model.pth")  
+            #torch.save(model.state_dict(), f"best_model_reducesim_{best_reducesim:.2f}.pth")            
+ 
+        if step % 10 == 0:
+            print(f"[Epoch {epoch}][{step}/{len(data_loader)}] "
+                  f"Loss: {cls_loss.item():.4f}, ReduceSim: {reduce_sim_score.item():.4f}, "
+                  f"λ: {dap_lambda:.4f}, Acc@1: {acc1.item():.2f}%")         
+            
+        if step % 50 == 0:
+            avg_sim = sum(reduce_sim_log[-50:]) / 50
+            print(f"Avg ReduceSim (last 50 steps): {avg_sim:.4f}")
+
+        print(f"Epoch {epoch}, Step {data_iter_step}, "
+            f"cls_loss: {cls_loss.item():.4f}, "
+            #f"loss_dap: {loss_dap.item():.4f}, "
+            f"reduce_sim_score: {reduce_sim_score.item():.4f}, " 
+            f"simloss: {simloss.item():.4f}, " 
+            f"loss: {loss.item():.4f}, "
+            #f"loss_dap: {loss_dap.item():.4f}, "
+            f"Output min: {output.min().item():.4f}, max: {output.max().item():.4f}")                    
+
+        #EVANDRO: Adapted from DAP algorithm
+        #if (loss == -1) or (math.isfinite(loss) == True):
+            #return None             # continue
+        #    loss = 0 
+
+        #EVANDRO: DAP LOSS
+        # sum_of_parameters = sum(p.sum() for p in model.parameters())
+        # zero_sum = sum_of_parameters * 0.0
+        # final_loss = loss + zero_sum
+        # loss_value = final_loss.item()
+        #OR
+        loss= loss+ 0. * sum(p.sum() for p in model.parameters())     # MANTER PARA NÃO TER O ERRO THE RANK
         loss_value = loss.item()
 
         if not math.isfinite(loss_value):  # This could trigger if using AMP
             print("Loss is {}, stopping training".format(loss_value))
-            assert math.isfinite(loss_value)
+            assert math.isfinite(loss_value)        
+
 
         if use_amp:
             # This attribute is added by timm on one optimizer (adahessian)
@@ -120,17 +211,16 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             if use_amp:
                 wandb_logger._wandb.log({'Rank-0 Batch Wise/train_grad_norm': grad_norm}, commit=False)
             wandb_logger._wandb.log({'Rank-0 Batch Wise/global_train_step': it})
-
+    
+    writer.close()
     # Gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
-
 @torch.no_grad()
 def evaluate(data_loader, model, device, use_amp=False):
     criterion = torch.nn.CrossEntropyLoss()
-
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 
@@ -144,23 +234,47 @@ def evaluate(data_loader, model, device, use_amp=False):
         target = target.to(device, non_blocking=True)
 
         # Compute output
+        # if use_amp: 
+        #     with torch.cuda.amp.autocast(): 
+        #         output = model(images)
+        #         loss = criterion(output, target)
+        # else:
+        #     output = model(images)
+        #     loss = criterion(output, target)
+
+        #dap_lambda = 0.1   #EVANDRO
         if use_amp:
             with torch.cuda.amp.autocast():
-                output = model(images)
+                output, reduce_sim_score = model(images)
+                if isinstance(output, tuple): #EVANDRO
+                    output = output[0]  #EVANDRO
                 loss = criterion(output, target)
         else:
-            output = model(images)
+            output, reduce_sim_score = model(images)
+            if isinstance(output, tuple):  #EVANDRO
+                output = output[0]  #EVANDRO
             loss = criterion(output, target)
+
+        # if loss == -1:
+        #     return
+        #loss = loss_cls - dap_lambda * reduce_sim_score if reduce_sim_score is not None else loss_cls  #EVANDRO
 
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
 
-        batch_size = images.shape[0]
+        batch_size = images.shape[0]      
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
-        metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
+        metric_logger.meters['acc5'].update(acc5.item(), n=batch_size) 
+
     # Gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'
           .format(top1=metric_logger.acc1, top5=metric_logger.acc5, losses=metric_logger.loss))
 
+    # EVANDRO: Tensorboard
+    # writer.add_scalar('Accuracy/top1', acc1.item(), step)
+    # writer.add_scalar('Accuracy/top5', acc5.item(), step)
+    # writer.add_scalar('Loss/total_loss', loss.item(), step)
+
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+ 

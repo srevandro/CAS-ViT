@@ -71,6 +71,18 @@ Checkpoint of CAS-ViT-M should give:
 
 ### 3. Training
 
+#### Tensorboard run in bash
+# tensorboard --logdir=./runs
+# Then open http://localhost:6006
+
+#### EVANDRO - CAS-DAP
+
+python -m torch.distributed.run --nproc_per_node 1 main.py  --data_set CIFAR --output_dir ./output --model rcvit_xs --lr 6e-3 --batch_size 128 --epochs 10 --drop_path 0.1 --model_ema False --use_amp False --input_size 32 --num_workers 1 --warmup_steps 1950 --print_verbose 1 > casdap2_res.txt
+
+python -m torch.distributed.run --nproc_per_node 1 main.py --data_path ../../dataset/imagenet --output_dir ./output --model rcvit_xs  --lr 6e-3 --batch_size 16 --drop_path 0.1 --model_ema False --model_ema_eval False --use_amp False --multi_scale_sampler > cas_result.txt
+
+python -m torch.distributed.run --nproc_per_node 1 main.py --data_path ../dataset/cifar100 --data_set CIFAR --input_size 32 --output_dir ./output --model rcvit_xs  --lr 6e-3 --batch_size 16 --drop_path 0.1 --use_amp True --multi_scale_sampler --config-file ./configs/dap/cifar.yaml
+
 On a single machine with 8 GPUs, run the following command to train:
 ```python
 python -m torch.distributed.launch --nproc_per_node 8 main.py \

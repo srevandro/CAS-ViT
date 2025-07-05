@@ -1,15 +1,17 @@
-from torch.utils.data.sampler import Sampler
-import torch.distributed as dist
 import math
 import random
 import numpy as np
 import os
 import cv2
+import torch.distributed as dist
+from typing import Any, Optional, Tuple
 from PIL import Image
+from torch.utils.data.sampler import Sampler
+from torchvision import datasets
 from torchvision.datasets import ImageFolder
 from timm.data import create_transform
 from timm.data.constants import \
-    IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_INCEPTION_MEAN, IMAGENET_INCEPTION_STD
+	IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_INCEPTION_MEAN, IMAGENET_INCEPTION_STD
 from torchvision import transforms
 from typing import Tuple
 from typing import Optional, Union
@@ -386,3 +388,27 @@ class ImageNetADataset(ImageNet1kDataset):
 	            img = img.convert('RGB')
 
         return img
+
+# Sobrescrevendo o CIFAR100 do torchvision para o cas-dap
+class CIFAR100CasDap(datasets.CIFAR100):
+	def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
+		"""
+		Args:
+			index (int): Index
+
+		Returns:
+			tuple: (image, target, id) where target is index of the target class.
+		"""
+		img, target = self.data[index], self.targets[index]
+
+		# doing this so that it is consistent with all other datasets
+		# to return a PIL Image
+		img = Image.fromarray(img)
+
+		if self.transform is not None:
+			img = self.transform(img)
+
+		if self.target_transform is not None:
+			target = self.target_transform(target)
+
+		return img, target, target
