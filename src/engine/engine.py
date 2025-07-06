@@ -4,10 +4,11 @@ import torch
 from timm.data import Mixup
 from timm.utils import accuracy, ModelEma
 
-import utils
+#import utils
+from ..utils import utils
 
-from torch.utils.tensorboard import SummaryWriter #EVANDRO: Tensorboard
-
+#EVANDRO: Tensorboard and logs
+from torch.utils.tensorboard import SummaryWriter 
 reduce_sim_log = []  # at the start of training
 
 #2. Adjust lambda_dap dynamically during training

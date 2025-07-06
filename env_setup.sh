@@ -40,21 +40,16 @@ conda install -c conda-forge cudnn
 
 
 #DAP - NÃO PRECISA PARA SOMENTE CAS
-#pip install tensorflow==2.5.0 #incompatível com scipy que precisa numpy 1.23.4 (tensorflow==2.7.0  OK)
-#pip install tensorflow==2.7.0 
+# pip install tensorflow==2.5.0
+# conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=11.3 -c pytorch
+# conda install -c conda-forge cudnn
 
-#conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=11.3 -c pytorch
-#conda install -c conda-forge cudnn  
-
-#install Git using apt-get: 
-#sudo apt-get update 
-#sudo apt-get install git
-#pip install git+https://github.com/facebookresearch/fvcore.git
-#pip install numpy==1.23.4
-#pip install tensorflow_datasets==4.9.2
-#pip install scipy==1.10.1
-#pip install ml-collections==0.1.1
-#pip install -U --force-reinstall charset-normalizer 
+# pip install git+https://github.com/facebookresearch/fvcore.git
+# pip install numpy==1.23.4
+# pip install tensorflow_datasets
+# pip install scipy
+# pip install ml-collections
+# pip install -U --force-reinstall charset-normalizer
 
 #MAY HAVE PROBLEMS IN THE ALGO COMPILATIONS
 #ModuleNotFoundError: No module named 'cv2'

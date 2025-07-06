@@ -7,7 +7,7 @@ from timm.data import create_transform
 
 import sys
 sys.path.append('../')
-from data.samplers import MultiScaleImageFolder, MultiScaleImageNet1k, ImageNet1kDataset, ImageNetADataset, CIFAR100CasDap
+from src.data.samplers import MultiScaleImageFolder, MultiScaleImageNet1k, ImageNet1kDataset, ImageNetADataset, CIFAR100CasDap
 
 
 
