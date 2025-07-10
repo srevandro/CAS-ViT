@@ -75,8 +75,23 @@ def collect_env_info() -> str:
 #def get_args_parser():
 def default_argument_parser(): 
     
-    parser = argparse.ArgumentParser('CAS-ViT training and evaluation script for image classification', add_help=False)
-    parser.add_argument('--batch_size', default=256, type=int,
+    parser = argparse.ArgumentParser('CAS-DAP training and evaluation script for image classification', add_help=False)
+     
+    #FROM DAP 
+    parser.add_argument(
+        "--config-file", metavar="FILE", help="path to config file")
+    parser.add_argument(
+        "opts",
+        help="Modify config options using the command-line",
+        default=None,
+        nargs=argparse.REMAINDER,
+    )    
+ 
+    parser.add_argument('--dap_lambda', type=float, default=0.01, #0.1
+                        help='Weight for DAP reduce_sim loss')
+
+    #CAS-ViT parameters
+    parser.add_argument('--batch_size', default=128, type=int, #default=256
                         help='Per GPU batch size')
     parser.add_argument('--epochs', default=30, type=int)
     parser.add_argument('--update_freq', default=2, type=int,

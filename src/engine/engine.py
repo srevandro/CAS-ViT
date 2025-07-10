@@ -26,7 +26,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     num_training_steps_per_epoch=None, update_freq=None, use_amp=False):
     model.train(True)
 
-    writer = SummaryWriter(log_dir='./runs/rcvit_with_dap') #EVANDRO: Tensorboard
+    writer = SummaryWriter(log_dir='./runs') #EVANDRO: Tensorboard
 
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))

@@ -1,64 +1,78 @@
+#!/usr/bin/env python3
 """
-Implements the knowledge distillation loss, proposed in deit
+loss functions
 """
+
 import torch
-from torch.nn import functional as F
+import torch.nn as nn
+import torch.nn.functional as F
+from typing import Optional
 
 
-class DistillationLoss(torch.nn.Module):
-    """
-    This module wraps a standard criterion and adds an extra knowledge distillation loss by
-    taking a teacher model prediction and using it as additional supervision.
-    """
+class SigmoidLoss(nn.Module):
+    def __init__(self, cfg=None):
+        super(SigmoidLoss, self).__init__()
 
-    def __init__(self, base_criterion: torch.nn.Module, teacher_model: torch.nn.Module,
-                 distillation_type: str, alpha: float, tau: float):
-        super().__init__()
-        self.base_criterion = base_criterion
-        self.teacher_model = teacher_model
-        assert distillation_type in ['none', 'soft', 'hard']
-        self.distillation_type = distillation_type
-        self.alpha = alpha
-        self.tau = tau
+    def is_single(self):
+        return True
 
-    def forward(self, inputs, outputs, labels):
-        """
-        Args:
-            inputs: The original inputs that are feed to the teacher model
-            outputs: the outputs of the model to be trained. It is expected to be
-                either a Tensor, or a Tuple[Tensor, Tensor], with the original output
-                in the first position and the distillation predictions as the second output
-            labels: the labels for the base criterion
-        """
-        outputs_kd = None
-        if not isinstance(outputs, torch.Tensor):
-            # assume that the model outputs a tuple of [outputs, outputs_kd]
-            outputs, outputs_kd = outputs
-        base_loss = self.base_criterion(outputs, labels)
-        if self.distillation_type == 'none':
-            return base_loss
+    def is_local(self):
+        return False
 
-        if outputs_kd is None:
-            raise ValueError("When knowledge distillation is enabled, the model is "
-                             "expected to return a Tuple[Tensor, Tensor] with the output of the "
-                             "class_token and the dist_token")
-        # don't backprop throught the teacher
-        with torch.no_grad():
-            teacher_outputs = self.teacher_model(inputs)
+    def multi_hot(self, labels: torch.Tensor, nb_classes: int) -> torch.Tensor:
+        labels = labels.unsqueeze(1)  # (batch_size, 1)
+        target = torch.zeros(
+            labels.size(0), nb_classes, device=labels.device
+        ).scatter_(1, labels, 1.)
+        # (batch_size, num_classes)
+        return target
 
-        if self.distillation_type == 'soft':
-            T = self.tau
-            # taken from https://github.com/peterliht/knowledge-distillation-pytorch/blob/master/model/net.py#L100
-            # with slight modifications
-            distillation_loss = F.kl_div(
-                F.log_softmax(outputs_kd / T, dim=1),
-                F.log_softmax(teacher_outputs / T, dim=1),
-                reduction='sum',
-                log_target=True
-            ) * (T * T) / outputs_kd.numel()
-        elif self.distillation_type == 'hard':
-            distillation_loss = F.cross_entropy(
-                outputs_kd, teacher_outputs.argmax(dim=1))
+    def loss(
+        self, logits, targets, per_cls_weights,
+        multihot_targets: Optional[bool] = False
+    ):
+        # targets: 1d-tensor of integer
+        # Only support single label at this moment
+        # if len(targets.shape) != 2:
+        num_classes = logits.shape[1]
+        targets = self.multi_hot(targets, num_classes)
 
-        loss = base_loss * (1 - self.alpha) + distillation_loss * self.alpha
+        loss = F.binary_cross_entropy_with_logits(
+            logits, targets, reduction="none")
+        weight = torch.tensor(
+            per_cls_weights, device=logits.device
+        ).unsqueeze(0)
+        loss = torch.mul(loss.to(torch.float32), weight.to(torch.float32))
+        return torch.sum(loss) / targets.shape[0]
+
+    def forward(
+        self, pred_logits, targets, per_cls_weights=None, multihot_targets=False
+    ):
+        loss = self.loss(
+            pred_logits, targets,  per_cls_weights, multihot_targets)
         return loss
+
+
+class SoftmaxLoss(SigmoidLoss):
+    def __init__(self, cfg=None):
+        super(SoftmaxLoss, self).__init__()
+
+    def loss(self, logits, targets, per_cls_weights, kwargs):
+        loss = F.cross_entropy(logits, targets, per_cls_weights, reduction="none")
+        return torch.sum(loss) / targets.shape[0]
+
+
+LOSS = {
+    "softmax": SoftmaxLoss,
+}
+
+
+def build_loss(cfg):
+    loss_name = cfg.SOLVER.LOSS
+    assert loss_name in LOSS, \
+        f'loss name {loss_name} is not supported'
+    loss_fn = LOSS[loss_name]
+    if not loss_fn:
+        return None
+    else:
+        return loss_fn(cfg)

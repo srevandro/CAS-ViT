@@ -170,10 +170,10 @@ venv/
 
 # Data, models, logs
 cas/
-dap/
-#data/
+dap/ 
 datasets/
-#models/
+dataset/ 
+runs/ 
 output/ 
 logs/
 

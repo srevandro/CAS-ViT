@@ -75,10 +75,14 @@ Checkpoint of CAS-ViT-M should give:
 # tensorboard --logdir=./runs
 # Then open http://localhost:6006
 
-#### EVANDRO - CAS-DAP
 
+#### EVANDRO - CAS-DAP - Running WITHOUT integration of DAP
 python -m torch.distributed.run --nproc_per_node 1 main.py  --data_set CIFAR --output_dir ./output --model rcvit_xs --lr 6e-3 --batch_size 128 --epochs 10 --drop_path 0.1 --model_ema False --use_amp False --input_size 32 --num_workers 1 --warmup_steps 1950 --print_verbose 1 > casdap2_res.txt
 
+#### EVANDRO - CAS-DAP - Running WITH integration of DAP (working on it)
+python -m torch.distributed.run --nproc_per_node 1 main.py  --data_set CIFAR --output_dir ./output --model rcvit_xs --lr 6e-3 --batch_size 128 --epochs 10 --drop_path 0.1 --model_ema False --use_amp False --input_size 32 --num_workers 1 --warmup_steps 1950 --print_verbose 1 > ./logs/casdap2_res12.txt --config-file ./configs/dap/cifar.yaml
+
+#### EVANDRO - CAS-DAP - Other previous compilations
 python -m torch.distributed.run --nproc_per_node 1 main.py --data_path ../../dataset/imagenet --output_dir ./output --model rcvit_xs  --lr 6e-3 --batch_size 16 --drop_path 0.1 --model_ema False --model_ema_eval False --use_amp False --multi_scale_sampler > cas_result.txt
 
 python -m torch.distributed.run --nproc_per_node 1 main.py --data_path ../dataset/cifar100 --data_set CIFAR --input_size 32 --output_dir ./output --model rcvit_xs  --lr 6e-3 --batch_size 16 --drop_path 0.1 --use_amp True --multi_scale_sampler --config-file ./configs/dap/cifar.yaml
@@ -108,67 +112,10 @@ python -m torch.distributed.launch --nproc_per_node 8 main.py \
     --model_ema_eval True --use_amp True \
     --auto_resume False --multi_scale_sampler
 ```
-## Object Detection and Instance Segmentation
 
-### 1. Data preparation
 
-Prepare COCO according to the guidelines in [MMDetection](https://github.com/open-mmlab/mmdetection/tree/v2.24.0).
-
-### 2. Evaluation
-
-To evaluate CAS-ViT + RetinaNet on COCO val 2017 on a single machine with 8 GPUs, run the following command:
-```python
-python -m torch.distributed.launch --nproc_per_node 8 test.py \
-    <config path> \
-    <checkpoint file> \
-    --launcher pytorch
-```
-
-### 3. Training
-
-To train CAS-ViT-M + RetinaNet on COCO val 2017 on a single machine with 8 GPUs, run the following command:
-
-```python
-python -m torch.distributed.launch --nproc_per_node 8 train.py \
-    <config path> --launcher pytorch
-```
-
-## Semantic Segmentation
-
-### 1. Data preparation
-
-Prepare ADE20K according to the guidelines in [MMSegmentation](https://github.com/open-mmlab/mmsegmentation/tree/0.x).
-
-### 2. Evaluation
-
-To evaluate CAS-ViT + Semantic FPN on ADE20K on a single machine with 8 GPUs, run the following command:
-```python
-python -m torch.distributed.launch --nproc_per_node 8 tools/test.py \
-    <config path> \
-    <checkpoint file> \
-    --launcher pytorch
-```
-
-### 3. Training
-
-To train CAS-ViT-M + Semantic FPN on ADE20K on a single machine with 8 GPUs, run the following command:
-
-```python
-python -m torch.distributed.launch --nproc_per_node 8 tools/train.py \
-    <config path> --launcher pytorch
-```
 
 ## Citation
 
-```bibtex
-@article{zhang2024cas,
-  title={CAS-ViT: Convolutional Additive Self-attention Vision Transformers for Efficient Mobile Applications},
-  author={Zhang, Tianfang and Li, Lei and Zhou, Yang and Liu, Wentao and Qian, Chen and Ji, Xiangyang},
-  journal={arXiv preprint arXiv:2408.03703},
-  year={2024}
-}
-```
 
 ## Acknowledgment
-Our code was build base on [ConvNeXt](https://github.com/facebookresearch/ConvNeXt), [EdgeNeXt](https://github.com/mmaaz60/EdgeNeXt/tree/main), [PoolFormer](https://github.com/sail-sg/poolformer/tree/main), [MMDetection](https://github.com/open-mmlab/mmdetection/tree/v2.24.0) and [MMsegmentation](https://github.com/open-mmlab/mmsegmentation/tree/0.x). Thanks for their public repository and excellent contributions!
-
