@@ -194,6 +194,7 @@ class AdditiveBlock(nn.Module):
         # self.dap_film = nn.Linear(dap_config.TASK_EMB, config.hidden_size * 2)
         # self.dap_norm = LayerNorm(config.hidden_size, eps=1e-6)        
 
+    #def inject_prompts(self, x, task_id_estimated_emb):
     def inject_prompts(self, x, task_id_estimated_emb):
         B, C, H, W = x.shape
         L = H * W
@@ -270,7 +271,8 @@ class AdditiveBlock(nn.Module):
     #     return x_out
 
 
-    def forward(self, x, task_id_emb=None): #, layer_index=None, cfg=None
+    #def forward(self, x, task_id_emb=None): #, layer_index=None, cfg=None
+    def forward(self, x, task_id=None): #, layer_index=None, cfg=None    
         """
         Forward pass with optional DAP prompt injection.
         """
@@ -622,13 +624,15 @@ class RCViT(nn.Module):
 
     
 
-    def forward_tokens(self, x, task_id_emb=None):
+    #def forward_tokens(self, x, task_id_emb=None):
+    def forward_tokens(self, x, task_id=None):    
         outs = []
         for idx, block in enumerate(self.network):
             if isinstance(block, AdditiveBlock):
-                x = block(x, task_id_emb=task_id_emb)
+                x = block(x, task_id=task_id) #x = block(x, task_id_emb=task_id_emb)
             else:
                 x = block(x)
+                     
             if self.fork_feat and idx in self.out_indices:
                 norm_layer = getattr(self, f'norm{idx}')
                 x_out = norm_layer(x)
@@ -637,9 +641,11 @@ class RCViT(nn.Module):
             return outs
         return x
 
-    def forward(self, x, task_id_emb=None):
+    #def forward(self, x, task_id_emb=None):
+    def forward(self, x, task_id=None):
         x = self.patch_embed(x)
-        x = self.forward_tokens(x, task_id_emb=task_id_emb)
+        #x = self.forward_tokens(x, task_id_emb=task_id_emb)
+        x = self.forward_tokens(x, task_id=task_id)
         if self.fork_feat:
             return x
         x = self.norm(x)

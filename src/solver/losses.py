@@ -59,6 +59,7 @@ class SoftmaxLoss(SigmoidLoss):
 
     def loss(self, logits, targets, per_cls_weights, kwargs):
         loss = F.cross_entropy(logits, targets, per_cls_weights, reduction="none")
+
         return torch.sum(loss) / targets.shape[0]
 
 

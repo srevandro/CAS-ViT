@@ -1,0 +1,100 @@
+CONTINUAL:
+  AA: None
+  COLOR_JITTER: None
+  INCREMENT: 10
+  INITIAL: 10
+  N_TASKS: 10
+  RECOUNT: 1
+  REMODE: pixel
+  REPROB: 0.0
+  RESPLIT: False
+CUDNN_BENCHMARK: False
+DATA:
+  BATCH_SIZE: 128
+  CLASS_WEIGHTS_TYPE: none
+  CROPSIZE: 224
+  DATAPATH: ./dataset
+  FEATURE: sup_vitb16_imagenet21k
+  MULTILABEL: False
+  NAME: cifar100
+  NO_TEST: False
+  NUMBER_CLASSES: 100
+  NUM_WORKERS: 4
+  PERCENTAGE: 1.0
+  PIN_MEMORY: True
+DBG: False
+DIST_BACKEND: nccl
+DIST_INIT_FILE: 
+DIST_INIT_PATH: env://
+MODEL:
+  DAP:
+    CURRENT_LAMBDA: 1.0
+    DROPOUT: 0.3
+    INIT: None
+    NUM_DAP_TOKENS: 10
+    NUM_TASKS_FOR_EMB: 10
+    PROMPT_POOL: 10
+    SIM_LAMBDA: 0.1
+    TASK_EMB: 16
+  LINEAR:
+    DROPOUT: 0.1
+    MLP_SIZES: []
+  MLP_NUM: 0
+  MODEL_ROOT: ./model
+  NUM_HEAD: 12
+  SAVE_CKPT: False
+  TRANSFER_TYPE: dap
+  TYPE: vit
+  WEIGHT_PATH: 
+NUM_GPUS: 1
+NUM_SHARDS: 1
+OUTPUT_DIR: ./results/seed42/cifar100
+RUN_N_TIMES: 1
+SEED: 42
+SOLVER:
+  BASE_LR: 0.01
+  BETA1: 0.9
+  BETA2: 0.9
+  BIAS_MULTIPLIER: 1.0
+  DBG_TRAINABLE: False
+  GRAD_CLIP: 1.0
+  GRAD_CLIP_APPLY: True
+  LOG_EVERY_N: 100
+  LOSS: softmax
+  LOSS_ALPHA: 0.01
+  MOMENTUM: 0.9
+  OPTIMIZER: adam
+  PATIENCE: 300
+  SCHEDULER: linear
+  TOTAL_EPOCH: 5
+  WARMUP_EPOCH: 0
+  WEIGHT_DECAY: 0.0
+  WEIGHT_DECAY_BIAS: 0
+
+
+[[0.04845 0.04334 0.0314  0.01803 0.01119 0.      0.      0.      0.
+  0.     ]
+ [0.      0.08068 0.08676 0.08166 0.08774 0.09721 0.096   0.096   0.096
+  0.096  ]
+ [0.      0.      0.      0.      0.      0.      0.      0.      0.
+  0.     ]
+ [0.      0.      0.      0.      0.      0.      0.      0.      0.
+  0.     ]
+ [0.      0.      0.      0.      0.      0.      0.      0.      0.
+  0.     ]
+ [0.      0.      0.      0.      0.      0.      0.      0.      0.
+  0.     ]
+ [0.      0.      0.      0.      0.      0.      0.      0.      0.
+  0.     ]
+ [0.      0.      0.      0.      0.      0.      0.      0.      0.
+  0.     ]
+ [0.      0.      0.      0.      0.      0.      0.      0.      0.
+  0.     ]
+ [0.      0.      0.      0.      0.      0.      0.      0.      0.
+  0.     ]]
+
+Final test Accuracy: 0.00960
+
+Final test Forget: 0.00552
+
+Final test LA: 0.01291

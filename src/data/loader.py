@@ -38,22 +38,57 @@ def _construct_continual_loader(cfg, dataset, shuffle=False):
     )
     return loader
 
+def _build_continual_dataset_pytorch(cfg, dataset):
+    prev_cls_increment = 0
+    cls_increment = cfg.CONTINUAL.INITIAL
+    scenario = []
+
+    # Full dataset targets
+    all_targets = np.array(dataset.targets)
+
+    for i in range(cfg.CONTINUAL.N_TASKS):
+        # Select indices with class in the current task
+        cls_mask = (all_targets < cls_increment) & (all_targets >= prev_cls_increment)
+        cls_indices = np.where(cls_mask)[0]
+
+        # Prepare new data subset
+        _labels = all_targets[cls_indices].tolist()
+        _image_data = dataset.data[cls_indices]  # shape: [N, H, W, C]
+
+        # Create a shallow copy of the original dataset
+        cur_dataset = deepcopy(dataset)
+
+        # Override data and targets
+        cur_dataset.data = _image_data
+        cur_dataset.targets = _labels
+
+        # Set class ids and mask
+        cur_dataset.class_ids = list(range(prev_cls_increment, cls_increment))
+        class_ids_mask = np.zeros(100, dtype=bool)  # for CIFAR-100
+        class_ids_mask[prev_cls_increment:cls_increment] = True
+        cur_dataset.class_ids_mask = class_ids_mask
+
+        scenario.append(cur_dataset)
+
+        # Move to next task
+        prev_cls_increment = cls_increment
+        cls_increment += cfg.CONTINUAL.INCREMENT
+
+    return scenario
+
 def _build_continual_dataset(cfg, dataset):
     prev_cls_increment = 0
     cls_increment = cfg.CONTINUAL.INITIAL
     scenario = []
 
     for i in range(cfg.CONTINUAL.N_TASKS):
-        cls_less = np.where((np.asarray(dataset._targets) < cls_increment) & (prev_cls_increment <= np.asarray(dataset._targets)))[0]
-        #cls_less = np.where((np.asarray(dataset.targets) < cls_increment) & (prev_cls_increment <= np.asarray(dataset.targets)))[0]
+        cls_less = np.where((np.asarray(dataset._targets) < cls_increment) & (prev_cls_increment <= np.asarray(dataset._targets)))[0] 
 
         _labels = []
         _image_files = []
         for j in cls_less:
             _labels.append(dataset._targets[j])
-            _image_files.append(dataset._image_tensor_list[j])
-            # _labels.append(dataset.targets[j])
-            # _image_files.append(dataset.data[j])
+            _image_files.append(dataset._image_tensor_list[j]) 
 
         cur_dataset = deepcopy(dataset)
  
@@ -61,12 +96,7 @@ def _build_continual_dataset(cfg, dataset):
         cur_dataset._image_tensor_list = _image_files
         cur_dataset._class_ids = dataset._class_ids[prev_cls_increment:cls_increment]
         cur_dataset._class_ids_mask = dataset._class_ids_mask[prev_cls_increment:cls_increment]
-
-        # cur_dataset.targets = _labels
-        # cur_dataset._image_tensor_list = _image_files
-        # cur_dataset._class_ids = dataset._class_ids[prev_cls_increment:cls_increment]
-        # cur_dataset._class_ids_mask = dataset._class_ids_mask[prev_cls_increment:cls_increment]
-
+ 
         prev_cls_increment = cls_increment
         cls_increment += cfg.CONTINUAL.INCREMENT
 

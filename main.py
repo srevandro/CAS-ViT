@@ -155,32 +155,33 @@ def train(args, cfg):
     model_ema = None
     max_accuracy = 0.0        
 
+    if args.model_ema and args.model_ema_eval:
+        max_accuracy_ema = 0.0
+        
     #From DAP
     #------------------------------------------------
-    # if torch.cuda.is_available():
-    #     torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
-    # if cfg.SEED is not None:
-    #     torch.manual_seed(cfg.SEED)
-    #     np.random.seed(cfg.SEED)
-    #     random.seed(0)
+    if cfg.SEED is not None:
+        torch.manual_seed(cfg.SEED)
+        np.random.seed(cfg.SEED)
+        random.seed(0)
     #------------------------------------------------
 
     #FROM CAS-ViT
     #------------------------------------------------    
-    utils.init_distributed_mode(args)
-    print(args)    
-    #device = torch.device(args.device)    
+    # utils.init_distributed_mode(args)
+    # print(args)    
+    # #device = torch.device(args.device)    
  
-    #Fix the seed for reproducibility  
-    seed = args.seed + utils.get_rank()
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    cudnn.benchmark = True         
+    # #Fix the seed for reproducibility  
+    # seed = args.seed + utils.get_rank()
+    # torch.manual_seed(seed)
+    # np.random.seed(seed)
+    # cudnn.benchmark = True         
     #------------------------------------------------
-
-
-
+    
     # init the logger name before other steps
     logger_name = time.strftime('%Y%m%d_%H%M%S', time.localtime())
 
@@ -188,77 +189,87 @@ def train(args, cfg):
     # Building datasets
     #---------------------------------
     print("Constructing datasets...")
-    #dataset_train, test_dataset = get_datasets(cfg)    
-    dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
+    #DAP
+    dataset_train, dataset_val = get_datasets(cfg)    
 
-    if args.disable_eval:
-        args.dist_eval = False
-        dataset_val = None
-    else:
-        dataset_val, _ = build_dataset(is_train=False, args=args)
+    #CAS-ViT
+    #================start here ================
+    # dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
+    # if args.disable_eval:
+    #     args.dist_eval = False
+    #     dataset_val = None
+    # else:
+    #     dataset_val, _ = build_dataset(is_train=False, args=args)
+    #================end here ================        
 
     #---------------------------------
     # Building tasks
     #---------------------------------
     num_tasks = utils.get_world_size()
     global_rank = utils.get_rank()
-    if args.multi_scale_sampler:
-        sampler_train = MultiScaleSamplerDDP(base_im_w=args.input_size, base_im_h=args.input_size,
-                                             base_batch_size=args.batch_size, n_data_samples=len(dataset_train),
-                                             is_training=True, distributed=args.distributed,
-                                             min_crop_size_w=args.min_crop_size_w, max_crop_size_w=args.max_crop_size_w,
-                                             min_crop_size_h=args.min_crop_size_h, max_crop_size_h=args.max_crop_size_h)
-    else:
-        sampler_train = torch.utils.data.DistributedSampler(
-            dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True, seed=args.seed,
-        )
-        print("Sampler_train = %s" % str(sampler_train))
-
-    if args.dist_eval:
-        if len(dataset_val) % num_tasks != 0:
-            print('Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. '
-                  'This will slightly alter validation results as extra duplicate entries are added to achieve '
-                  'equal num of samples per-process.')
-        sampler_val = torch.utils.data.DistributedSampler(
-            dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=False)
-    else:
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-
     # starting log metrics
     wandb_logger, log_writer = log_wandb(args, global_rank)
 
-    if args.multi_scale_sampler:
-        data_loader_train = torch.utils.data.DataLoader(
-            dataset_train, batch_sampler=sampler_train,
-            batch_size=1,
-            num_workers=args.num_workers,
-            pin_memory=args.pin_mem,
-        )
-    else:
-        data_loader_train = torch.utils.data.DataLoader(
-            dataset_train, sampler=sampler_train,
-            batch_size=args.batch_size,
-            num_workers=args.num_workers,
-            pin_memory=args.pin_mem,
-            drop_last=True,
-        )
+    #---------------------------------------
+    # Multi Scale Sampler and data loaders
+    #---------------------------------------
+    #================start here ================
+    # if args.multi_scale_sampler:
+    #     sampler_train = MultiScaleSamplerDDP(base_im_w=args.input_size, base_im_h=args.input_size,
+    #                                          base_batch_size=args.batch_size, n_data_samples=len(dataset_train),
+    #                                          is_training=True, distributed=args.distributed,
+    #                                          min_crop_size_w=args.min_crop_size_w, max_crop_size_w=args.max_crop_size_w,
+    #                                          min_crop_size_h=args.min_crop_size_h, max_crop_size_h=args.max_crop_size_h)
+    # else:
+    #     sampler_train = torch.utils.data.DistributedSampler(
+    #         dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True, seed=args.seed,
+    #     )
+    #     print("Sampler_train = %s" % str(sampler_train))
 
-    if dataset_val is not None:
-        data_loader_val = torch.utils.data.DataLoader(
-            dataset_val, sampler=sampler_val,
-            batch_size=int(1.5 * args.batch_size),
-            num_workers=args.num_workers,
-            pin_memory=args.pin_mem,
-            drop_last=False
-        )
-    else:
-        data_loader_val = None
+    # if args.dist_eval:
+    #     if len(dataset_val) % num_tasks != 0:
+    #         print('Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. '
+    #               'This will slightly alter validation results as extra duplicate entries are added to achieve '
+    #               'equal num of samples per-process.')
+    #     sampler_val = torch.utils.data.DistributedSampler(
+    #         dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=False)
+    # else:
+    #     sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+
+
+    # if args.multi_scale_sampler:
+    #     data_loader_train = torch.utils.data.DataLoader(
+    #         dataset_train, batch_sampler=sampler_train,
+    #         batch_size=1,
+    #         num_workers=args.num_workers,
+    #         pin_memory=args.pin_mem,
+    #     )
+    # else:
+    #     data_loader_train = torch.utils.data.DataLoader(
+    #         dataset_train, sampler=sampler_train,
+    #         batch_size=args.batch_size,
+    #         num_workers=args.num_workers,
+    #         pin_memory=args.pin_mem,
+    #         drop_last=True,
+    #     )
+
+    # if dataset_val is not None:
+    #     data_loader_val = torch.utils.data.DataLoader(
+    #         dataset_val, sampler=sampler_val,
+    #         batch_size=int(1.5 * args.batch_size),
+    #         num_workers=args.num_workers,
+    #         pin_memory=args.pin_mem,
+    #         drop_last=False
+    #     )
+    # else:
+    #     data_loader_val = None
+    #================end here ================        
 
     #---------------------------------
     # Building features
     #---------------------------------
-    print("Activating features")
-    mixup_fn = mixup(args)   
+    #print("Activating features")
+    #mixup_fn = mixup(args)   
 
     #---------------------------------
     # Building models
@@ -269,8 +280,8 @@ def train(args, cfg):
     model_without_ddp = model
     model_ema = create_model_ema (args, model)     # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper 
 
-    print("Activating fine-tuning")
-    model_state_dict_name = fine_tuning(args, model)  #EVANDRO: Model is not used here, but it is required to load the model state dict
+    #print("Activating fine-tuning")
+    #model_state_dict_name = fine_tuning(args, model)  #EVANDRO: Model is not used here, but it is required to load the model state dict
 
     #---------------------------------
     # Building distributed systems
@@ -287,50 +298,54 @@ def train(args, cfg):
     print("Number of training examples = %d" % len(dataset_train))
     print("Number of training training per epoch = %d" % num_training_steps_per_epoch)
 
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu],
-                                                          find_unused_parameters=args.find_unused_params)
-        model_without_ddp = model.module
+
+    #=====start here=====
+    # if args.distributed:
+    #     # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu],
+    #     #                                                   find_unused_parameters=args.find_unused_params)
+    #     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu],
+    #                                                       find_unused_parameters=True)        
+    #     model_without_ddp = model.module
 
 
-    assigner = validate_conditions(args)  #EVANDRO: Validate conditions and assign values if needed
-    optimizer = create_optimizer(
-        args, model_without_ddp, skip_list=None,
-        get_num_layer=assigner.get_layer_id if assigner is not None else None,
-        get_layer_scale=assigner.get_scale if assigner is not None else None
-        )
+    # assigner = validate_conditions(args)  #EVANDRO: Validate conditions and assign values if needed
+    # optimizer = create_optimizer(
+    #     args, model_without_ddp, skip_list=None,
+    #     get_num_layer=assigner.get_layer_id if assigner is not None else None,
+    #     get_layer_scale=assigner.get_scale if assigner is not None else None
+    #     )
 
-    loss_scaler = NativeScaler()  # if args.use_amp is False, this won't be used
+    # loss_scaler = NativeScaler()  # if args.use_amp is False, this won't be used
 
     #---------------------------------
     # Building activation functions
     #---------------------------------
-    print("Use Cosine LR scheduler")
-    lr_schedule_values = utils.cosine_scheduler(
-        args.lr, args.min_lr, args.epochs, num_training_steps_per_epoch,
-        warmup_epochs=args.warmup_epochs, warmup_steps=args.warmup_steps,
-        start_warmup_value=args.warmup_start_lr
-    )
+    # print("Use Cosine LR scheduler")
+    # lr_schedule_values = utils.cosine_scheduler(
+    #     args.lr, args.min_lr, args.epochs, num_training_steps_per_epoch,
+    #     warmup_epochs=args.warmup_epochs, warmup_steps=args.warmup_steps,
+    #     start_warmup_value=args.warmup_start_lr
+    # )
 
-    if args.weight_decay_end is None:
-        args.weight_decay_end = args.weight_decay
-    wd_schedule_values = utils.cosine_scheduler(
-        args.weight_decay, args.weight_decay_end, args.epochs, num_training_steps_per_epoch)
-    print("Max WD = %.7f, Min WD = %.7f" % (max(wd_schedule_values), min(wd_schedule_values)))
+    # if args.weight_decay_end is None:
+    #     args.weight_decay_end = args.weight_decay
+    # wd_schedule_values = utils.cosine_scheduler(
+    #     args.weight_decay, args.weight_decay_end, args.epochs, num_training_steps_per_epoch)
+    # print("Max WD = %.7f, Min WD = %.7f" % (max(wd_schedule_values), min(wd_schedule_values)))
 
-    if mixup_fn is not None:
-        # smoothing is handled with mixup label transform
-        criterion = SoftTargetCrossEntropy()
-    elif args.smoothing > 0.:
-        criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
-    else:
-        criterion = torch.nn.CrossEntropyLoss()
+    # if mixup_fn is not None:
+    #     # smoothing is handled with mixup label transform
+    #     criterion = SoftTargetCrossEntropy()
+    # elif args.smoothing > 0.:
+    #     criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
+    # else:
+    #     criterion = torch.nn.CrossEntropyLoss()
 
-    print("criterion = %s" % str(criterion))
+    # print("criterion = %s" % str(criterion))
 
-    utils.auto_load_model(
-        args=args, model=model, model_without_ddp=model_without_ddp,
-        optimizer=optimizer, loss_scaler=loss_scaler, model_ema=model_ema, state_dict_name=model_state_dict_name)
+    # utils.auto_load_model(
+    #     args=args, model=model, model_without_ddp=model_without_ddp,
+    #     optimizer=optimizer, loss_scaler=loss_scaler, model_ema=model_ema, state_dict_name=model_state_dict_name)
 
     # if args.eval:
     #     print(f"Eval only mode")
@@ -340,8 +355,7 @@ def train(args, cfg):
 
     #---------------------------------
     # Building training procedures
-    #---------------------------------
-    ## EVANDRO: Starting training procedures    
+    #--------------------------------- 
     #ORIGINAL FROM CASVIT
     total_params = count_parameters(model)
     # fvcore to calculate MAdds
@@ -352,95 +366,95 @@ def train(args, cfg):
     # model_flops = flops.total()
     print(f"Total Trainable Params: {round(total_params * 1e-6, 2)} M")
     # print(f"MAdds: {round(model_flops * 1e-6, 2)} M")
-    #     
-    #EVANDRO: From DAP
-    print("Setting up trainer...")
+    #   
+  
+    #---------------------------------
+    # DAP Training loop
+    #---------------------------------
     print("Start training for %d epochs" % args.epochs)
     start_time = time.time()        
-    #trainer = Trainer(cfg, model, device)
-    #trainer.train_classifier(args, global_rank, dataset_train, test_dataset) #, num_training_steps_per_epoch
 
+    print("Setting up trainer...")    
+    trainer = Trainer(cfg, model, device)
+    trainer.train_classifier(args, global_rank, dataset_train, dataset_val) #, num_training_steps_per_epoch test_dataset
 
-    #CAS-VIT TRAINING
-    print("Start training for %d epochs" % args.epochs)
-    start_time = time.time()
-    for epoch in range(args.start_epoch, args.epochs):
-        if args.multi_scale_sampler:
-            data_loader_train.batch_sampler.set_epoch(epoch)
-        elif args.distributed:
-            data_loader_train.sampler.set_epoch(epoch)
-        if log_writer is not None:
-            log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
-        if wandb_logger:
-            wandb_logger.set_steps()
+    #---------------------------------
+    # CAS-ViT Training loop
+    #---------------------------------
+    # for epoch in range(args.start_epoch, args.epochs):
+    #     if args.multi_scale_sampler:
+    #         data_loader_train.batch_sampler.set_epoch(epoch)
+    #     elif args.distributed:
+    #         data_loader_train.sampler.set_epoch(epoch)
+    #     if log_writer is not None:
+    #         log_writer.set_step(epoch * num_training_steps_per_epoch * args.update_freq)
+    #     if wandb_logger:
+    #         wandb_logger.set_steps()
 
+    #     #Calling train_one_epoch function    
+    #     train_stats = train_one_epoch(
+    #         model, criterion, data_loader_train, optimizer,
+    #         device, epoch, loss_scaler, args.clip_grad, model_ema, mixup_fn,
+    #         log_writer=log_writer, wandb_logger=wandb_logger, start_steps=epoch * num_training_steps_per_epoch,
+    #         lr_schedule_values=lr_schedule_values, wd_schedule_values=wd_schedule_values,
+    #         num_training_steps_per_epoch=num_training_steps_per_epoch, update_freq=args.update_freq,
+    #         use_amp=args.use_amp
+    #     )
 
-        #Calling train_one_epoch function    
-        train_stats = train_one_epoch(
-            model, criterion, data_loader_train, optimizer,
-            device, epoch, loss_scaler, args.clip_grad, model_ema, mixup_fn,
-            log_writer=log_writer, wandb_logger=wandb_logger, start_steps=epoch * num_training_steps_per_epoch,
-            lr_schedule_values=lr_schedule_values, wd_schedule_values=wd_schedule_values,
-            num_training_steps_per_epoch=num_training_steps_per_epoch, update_freq=args.update_freq,
-            use_amp=args.use_amp
-        )
+    #     if args.output_dir and args.save_ckpt:
+    #         if (epoch + 1) % args.save_ckpt_freq == 0 or epoch + 1 == args.epochs:
+    #             utils.save_model(
+    #                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+    #                 loss_scaler=loss_scaler, epoch=epoch, model_ema=model_ema)
+    #     if data_loader_val is not None:
+    #         test_stats = evaluate(data_loader_val, model, device, use_amp=args.use_amp)
+    #         print(f"Accuracy of the model on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
+    #         if max_accuracy < test_stats["acc1"]:
+    #             max_accuracy = test_stats["acc1"]
+    #             if args.output_dir and args.save_ckpt:
+    #                 utils.save_model(
+    #                     args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+    #                     loss_scaler=loss_scaler, epoch=f"best_{args.input_size}", model_ema=model_ema)
+    #         print(f'Max accuracy: {max_accuracy:.2f}%')
 
+    #         if log_writer is not None:
+    #             log_writer.update(test_acc1=test_stats['acc1'], head="perf", step=epoch)
+    #             log_writer.update(test_acc5=test_stats['acc5'], head="perf", step=epoch)
+    #             log_writer.update(test_loss=test_stats['loss'], head="perf", step=epoch)
 
+    #         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+    #                      **{f'test_{k}': v for k, v in test_stats.items()},
+    #                      'epoch': epoch,
+    #                      'n_parameters': n_parameters}
 
-        if args.output_dir and args.save_ckpt:
-            if (epoch + 1) % args.save_ckpt_freq == 0 or epoch + 1 == args.epochs:
-                utils.save_model(
-                    args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                    loss_scaler=loss_scaler, epoch=epoch, model_ema=model_ema)
-        if data_loader_val is not None:
-            test_stats = evaluate(data_loader_val, model, device, use_amp=args.use_amp)
-            print(f"Accuracy of the model on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
-            if max_accuracy < test_stats["acc1"]:
-                max_accuracy = test_stats["acc1"]
-                if args.output_dir and args.save_ckpt:
-                    utils.save_model(
-                        args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                        loss_scaler=loss_scaler, epoch=f"best_{args.input_size}", model_ema=model_ema)
-            print(f'Max accuracy: {max_accuracy:.2f}%')
+    #         # Repeat testing routines for EMA, if ema eval is turned on
+    #         if args.model_ema and args.model_ema_eval:
+    #             test_stats_ema = evaluate(data_loader_val, model_ema.ema, device, use_amp=args.use_amp)
+    #             print(f"Accuracy of the model EMA on {len(dataset_val)} test images: {test_stats_ema['acc1']:.1f}%")
+    #             if max_accuracy_ema < test_stats_ema["acc1"]:
+    #                 max_accuracy_ema = test_stats_ema["acc1"]
+    #                 if args.output_dir and args.save_ckpt:
+    #                     utils.save_model(
+    #                         args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+    #                         loss_scaler=loss_scaler, epoch=f"best-ema_{args.input_size}", model_ema=model_ema)
+    #             print(f'Max EMA accuracy: {max_accuracy_ema:.2f}%')
+    #             if log_writer is not None:
+    #                 log_writer.update(test_acc1_ema=test_stats_ema['acc1'], head="perf", step=epoch)
+    #             log_stats.update({**{f'test_{k}_ema': v for k, v in test_stats_ema.items()}})
+    #     else:
+    #         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+    #                      'epoch': epoch,
+    #                      'n_parameters': n_parameters}
 
-            if log_writer is not None:
-                log_writer.update(test_acc1=test_stats['acc1'], head="perf", step=epoch)
-                log_writer.update(test_acc5=test_stats['acc5'], head="perf", step=epoch)
-                log_writer.update(test_loss=test_stats['loss'], head="perf", step=epoch)
+    #     if args.output_dir and utils.is_main_process():
+    #         if log_writer is not None:
+    #             log_writer.flush()
+    #         with open(os.path.join(args.output_dir, f"{logger_name}_{args.input_size}.txt"), mode="a", encoding="utf-8") as f:
+    #             f.write(json.dumps(log_stats) + "\n")
 
-            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                         **{f'test_{k}': v for k, v in test_stats.items()},
-                         'epoch': epoch,
-                         'n_parameters': n_parameters}
-
-            # Repeat testing routines for EMA, if ema eval is turned on
-            if args.model_ema and args.model_ema_eval:
-                test_stats_ema = evaluate(data_loader_val, model_ema.ema, device, use_amp=args.use_amp)
-                print(f"Accuracy of the model EMA on {len(dataset_val)} test images: {test_stats_ema['acc1']:.1f}%")
-                if max_accuracy_ema < test_stats_ema["acc1"]:
-                    max_accuracy_ema = test_stats_ema["acc1"]
-                    if args.output_dir and args.save_ckpt:
-                        utils.save_model(
-                            args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                            loss_scaler=loss_scaler, epoch=f"best-ema_{args.input_size}", model_ema=model_ema)
-                print(f'Max EMA accuracy: {max_accuracy_ema:.2f}%')
-                if log_writer is not None:
-                    log_writer.update(test_acc1_ema=test_stats_ema['acc1'], head="perf", step=epoch)
-                log_stats.update({**{f'test_{k}_ema': v for k, v in test_stats_ema.items()}})
-        else:
-            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                         'epoch': epoch,
-                         'n_parameters': n_parameters}
-
-        if args.output_dir and utils.is_main_process():
-            if log_writer is not None:
-                log_writer.flush()
-            with open(os.path.join(args.output_dir, f"{logger_name}_{args.input_size}.txt"), mode="a", encoding="utf-8") as f:
-                f.write(json.dumps(log_stats) + "\n")
-
-        if wandb_logger:
-            wandb_logger.log_epoch_metrics(log_stats)
-    #ended training for
+    #     if wandb_logger:
+    #         wandb_logger.log_epoch_metrics(log_stats)
+    # #ended training for
 
     #---------------------------------
     # Saving and reporting results 

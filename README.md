@@ -80,7 +80,7 @@ Checkpoint of CAS-ViT-M should give:
 python -m torch.distributed.run --nproc_per_node 1 main.py  --data_set CIFAR --output_dir ./output --model rcvit_xs --lr 6e-3 --batch_size 128 --epochs 10 --drop_path 0.1 --model_ema False --use_amp False --input_size 32 --num_workers 1 --warmup_steps 1950 --print_verbose 1 > casdap2_res.txt
 
 #### EVANDRO - CAS-DAP - Running WITH integration of DAP (working on it)
-python -m torch.distributed.run --nproc_per_node 1 main.py  --data_set CIFAR --output_dir ./output --model rcvit_xs --lr 6e-3 --batch_size 128 --epochs 10 --drop_path 0.1 --model_ema False --use_amp False --input_size 32 --num_workers 1 --warmup_steps 1950 --print_verbose 1 > ./logs/casdap2_res12.txt --config-file ./configs/dap/cifar.yaml
+python -m torch.distributed.run --nproc_per_node 1 main.py  --data_set CIFAR --output_dir ./output --model rcvit_xs --lr 6e-3 --batch_size 128 --epochs 10 --drop_path 0.1 --model_ema False --use_amp False --input_size 32 --num_workers 1 --warmup_steps 1950 --print_verbose 1 --config-file ./configs/dap/cifar.yaml > ./logs/casdap2_res12.txt 
 
 #### EVANDRO - CAS-DAP - Other previous compilations
 python -m torch.distributed.run --nproc_per_node 1 main.py --data_path ../../dataset/imagenet --output_dir ./output --model rcvit_xs  --lr 6e-3 --batch_size 16 --drop_path 0.1 --model_ema False --model_ema_eval False --use_amp False --multi_scale_sampler > cas_result.txt

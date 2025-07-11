@@ -24,11 +24,16 @@ pip install fvcore
 apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
 pip install tensorboard
 
+#DAP ADDITIONAL
+pip install tensorflow
+pip install tensorflow_datasets
+pip install tensorrt
+
 #https://pytorch.org/get-started/locally/
 #pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-conda install pytorch torchvision  torchaudio  cudatoolkit -c pytorch
-conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=11.3 -c pytorch
-conda install -c conda-forge cudnn  
+#conda install pytorch torchvision  torchaudio  cudatoolkit -c pytorch
+#conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=11.3 -c pytorch
+#conda install -c conda-forge cudnn  
 
 ### Evandro: IMAGENET
 #https://stackoverflow.com/questions/64714119/valid-url-for-downloading-imagenet-dataset
